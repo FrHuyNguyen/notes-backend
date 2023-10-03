@@ -1,82 +1,42 @@
-const express = require("express");
-const cors = require("cors");
+require('dotenv').config();
+const express = require('express');
+
 const app = express();
 app.use(express.json());
+const cors = require('cors');
+const mongoose = require('mongoose');
+const logger = require('./utils/logger');
+const config = require('./utils/config');
+
+mongoose.set('strictQuery', false);
+logger.info('connecting to mongo', config.MONGODB_URI);
+mongoose
+  .connect(config.MONGODB_URI)
+  .then(() => {
+    logger.info('connected to mongo');
+  })
+  .catch((err) => {
+    logger.error('error connecting to mongo', err.message);
+  });
+
+const {
+  errorHandler,
+  unknownEndpoint,
+  requestLogger,
+} = require('./utils/middleware');
+
 app.use(cors());
 app.use(express.static('dist'));
+app.use(requestLogger);
 
-let notes = [
-  {
-    id: 1,
-    content: "HTML is easy",
-    important: true,
-  },
-  {
-    id: 2,
-    content: "Browser can execute only JavaScript",
-    important: false,
-  },
-  {
-    id: 3,
-    content: "GET and POST are the most important methods of HTTP protocol",
-    important: true,
-  },
-];
+const notesRouter = require('./controllers/notes');
 
-app.get("/", (req, res) => {
-  res.send("<div>Hello world I am Huy Nguyen</div>");
+app.use('/api/notes', notesRouter);
+
+// this has to be the last loaded middleware.
+app.use(unknownEndpoint);
+app.use(errorHandler);
+
+app.listen(config.PORT, () => {
+  logger.info(`Server running on port ${config.PORT}`);
 });
-
-app.get("/api/notes", (req, res) => {
-  console.log("notes", notes);
-
-  res.json(notes);
-});
-
-app.get("/api/notes/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const note = notes.find((note) => note.id === id);
-  if (note) {
-    res.json(note);
-  } else {
-    res.status(404).end();
-  }
-});
-
-app.delete("/api/notes/:id", (req, res) => {
-  const id = Number(req.params.id);
-  notes = notes.filter((note) => note.id !== id);
-  res.status(204).end();
-});
-
-const generateId = () => {
-  const maxId = notes.length > 0
-    ? Math.max(...notes.map(n => n.id))
-    : 0
-  return maxId + 1
-}
-
-app.post('/api/notes', (request, response) => {
-  const body = request.body
-
-  if (!body.content) {
-    return response.status(400).json({ 
-      error: 'content missing' 
-    })
-  }
-
-  const note = {
-    content: body.content,
-    important: body.important || false,
-    id: generateId(),
-  }
-
-  notes = notes.concat(note)
-
-  response.json(note)
-})
-
-const PORT = process.env.PORT || 3001
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
